@@ -1,0 +1,174 @@
+name: Testing in real apps
+on: [push, pull_request]
+
+jobs:
+    testing_app:
+        strategy:
+            fail-fast: false
+            matrix:
+                app:
+                    - name: npm
+                      pkg_manager: npm
+                      working_directory: test_apps/npm
+
+                    - name: npm (with .mjs config)
+                      pkg_manager: npm
+                      working_directory: test_apps/npm-mjs
+
+                    - name: npm (with Babel)
+                      pkg_manager: npm
+                      working_directory: test_apps/npm-with-babel
+
+                    - name: npm (with external Babel configuration file)
+                      pkg_manager: npm
+                      working_directory: test_apps/npm-with-external-babel-config
+
+                    - name: pnpm
+                      pkg_manager: pnpm
+                      working_directory: test_apps/pnpm
+
+                    - name: pnpm (with .mjs config)
+                      pkg_manager: pnpm
+                      working_directory: test_apps/pnpm-mjs
+
+                    - name: pnpm (with Babel)
+                      pkg_manager: pnpm
+                      working_directory: test_apps/pnpm-with-babel
+
+                    - name: pnpm (with external Babel configuration file)
+                      pkg_manager: pnpm
+                      working_directory: test_apps/pnpm-with-external-babel-config
+
+                    - name: Yarn Plug'n'Play
+                      pkg_manager: yarn
+                      working_directory: test_apps/yarn-pnp
+
+                    - name: Yarn Plug'n'Play (with .mjs config)
+                      pkg_manager: yarn
+                      working_directory: test_apps/yarn-pnp-mjs
+
+                    - name: Yarn Plug'n'Play (with Babel)
+                      pkg_manager: yarn
+                      working_directory: test_apps/yarn-pnp-with-babel
+
+                    - name: Yarn Plug'n'Play (with external Babel configuration file)
+                      pkg_manager: yarn
+                      working_directory: test_apps/yarn-pnp-with-external-babel-config
+
+                    - name: lowest peers (sass)
+                      pkg_manager: pnpm
+                      working_directory: test_apps/lowest-peers-sass
+
+                    - name: lowest peers (less)
+                      pkg_manager: pnpm
+                      working_directory: test_apps/lowest-peers-less
+
+                    - name: lowest peers (postcss)
+                      pkg_manager: pnpm
+                      working_directory: test_apps/lowest-peers-postcss
+
+                    - name: lowest peers (react)
+                      pkg_manager: pnpm
+                      working_directory: test_apps/lowest-peers-react
+
+                    - name: lowest peers (vue)
+                      pkg_manager: pnpm
+                      working_directory: test_apps/lowest-peers-vue
+
+                    - name: lowest peers (vue with JSX)
+                      pkg_manager: pnpm
+                      working_directory: test_apps/lowest-peers-vue-jsx
+
+                    - name: lowest peers (TypeScript 5 with Babel preset)
+                      pkg_manager: pnpm
+                      working_directory: test_apps/lowest-peers-typescript5
+
+                    - name: lowest peers (TypeScript + fork-ts-checker v7)
+                      pkg_manager: pnpm
+                      working_directory: test_apps/lowest-peers-typescript-fork7
+
+                    - name: lowest peers (TypeScript + fork-ts-checker v8)
+                      pkg_manager: pnpm
+                      working_directory: test_apps/lowest-peers-typescript-fork8
+
+                    - name: lowest peers (TypeScript + fork-ts-checker v9)
+                      pkg_manager: pnpm
+                      working_directory: test_apps/lowest-peers-typescript-fork9
+
+                    - name: lowest peers (Svelte v3)
+                      pkg_manager: pnpm
+                      working_directory: test_apps/lowest-peers-svelte3
+
+                    - name: lowest peers (Svelte v4)
+                      pkg_manager: pnpm
+                      working_directory: test_apps/lowest-peers-svelte4
+
+                    - name: lowest peers (Stimulus Bridge v3)
+                      pkg_manager: pnpm
+                      working_directory: test_apps/lowest-peers-stimulus3
+
+                    - name: lowest peers (webpack-cli v6)
+                      pkg_manager: pnpm
+                      working_directory: test_apps/lowest-peers-webpack-cli6
+
+        name: ${{ matrix.app.name }}
+        runs-on: ubuntu-latest
+        permissions: {}
+        env:
+            # We don't want Puppeteer to automatically download a browser when dependencies are being installed
+            PUPPETEER_SKIP_DOWNLOAD: 'true'
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+
+            - name: Install pnpm
+              uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+            - name: Compute testing app's lockfile
+              run: echo "LOCKFILE=${{ matrix.app.pkg_manager == 'yarn' && 'yarn.lock' || matrix.app.pkg_manager == 'pnpm' && 'pnpm-lock.yaml' || matrix.app.pkg_manager == 'npm' && 'package-lock.json' }}" >> $GITHUB_ENV
+
+            - run: npm i -g corepack && corepack enable
+
+            - name: Node
+              uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+              with:
+                  node-version: '22.18.0'
+                  cache: ${{ matrix.app.pkg_manager }}
+                  cache-dependency-path: ${{ matrix.app.working_directory }}/${{ env.LOCKFILE }}
+
+            - name: Installing dependencies
+              run: |
+                  pnpm install --frozen-lockfile
+
+            - name: Packing Encore
+              run: pnpm pack --out webpack-encore.tgz
+
+            - name: Running script (npm)
+              if: ${{ matrix.app.pkg_manager == 'npm' }}
+              working-directory: ${{ matrix.app.working_directory }}
+              run: |
+                  npm install --ci
+                  npm add --save-dev ../../webpack-encore.tgz
+                  npm run encore dev
+                  npm run encore production
+
+            - name: Running script (pnpm)
+              if: ${{ matrix.app.pkg_manager == 'pnpm' }}
+              working-directory: ${{ matrix.app.working_directory }}
+              run: |
+                  pnpm install --ignore-workspace --frozen-lockfile
+                  pnpm add --ignore-workspace --save-dev ../../webpack-encore.tgz
+                  pnpm run encore dev
+                  pnpm run encore production
+
+            - name: Running script (yarn)
+              if: ${{ matrix.app.pkg_manager == 'yarn' }}
+              working-directory: ${{ matrix.app.working_directory }}
+              run: |
+                  yarn install --immutable
+                  yarn add --dev ../../webpack-encore.tgz
+                  yarn run encore dev
+                  yarn run encore production

@@ -1,0 +1,124 @@
+/*
+ * This file is part of the Symfony Webpack Encore package.
+ *
+ * (c) Fabien Potencier <fabien@symfony.com>
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+import { describe, it, expect } from 'vitest';
+
+import RuntimeConfig from '../../lib/config/RuntimeConfig.ts';
+import cssLoader from '../../lib/loaders/css.ts';
+import WebpackConfig from '../../lib/WebpackConfig.ts';
+
+function createConfig() {
+    const runtimeConfig = new RuntimeConfig();
+    runtimeConfig.context = import.meta.dirname;
+    runtimeConfig.babelRcFileExists = false;
+
+    return new WebpackConfig(runtimeConfig);
+}
+
+describe('loaders/css', function () {
+    it('getLoaders() basic usage', function () {
+        const config = createConfig();
+        config.enableSourceMaps(true);
+
+        const actualLoaders = cssLoader.getLoaders(config);
+        expect(actualLoaders).toHaveLength(1);
+        expect(actualLoaders[0].options.sourceMap).toBe(true);
+        expect(actualLoaders[0].options.modules).toBe(false);
+    });
+
+    it('getLoaders() for production', function () {
+        const config = createConfig();
+        config.enableSourceMaps(false);
+        config.runtimeConfig.environment = 'production';
+
+        const actualLoaders = cssLoader.getLoaders(config);
+        expect(actualLoaders).toHaveLength(1);
+        expect(actualLoaders[0].options.sourceMap).toBe(false);
+        expect(actualLoaders[0].options.modules).toBe(false);
+    });
+
+    it('getLoaders() with options callback', function () {
+        const config = createConfig();
+
+        config.configureCssLoader(function (options) {
+            options.foo = true;
+            options.url = false;
+        });
+
+        const actualLoaders = cssLoader.getLoaders(config);
+        expect(actualLoaders).toHaveLength(1);
+        expect(actualLoaders[0].options.foo).toBe(true);
+        expect(actualLoaders[0].options.url).toBe(false);
+        expect(actualLoaders[0].options.modules).toBe(false);
+    });
+
+    it('getLoaders() with CSS modules enabled', function () {
+        const config = createConfig();
+
+        config.configureCssLoader(function (options) {
+            options.foo = true;
+            options.url = false;
+        });
+
+        const actualLoaders = cssLoader.getLoaders(config, true);
+        expect(actualLoaders).toHaveLength(1);
+        expect(actualLoaders[0].options.foo).toBe(true);
+        expect(actualLoaders[0].options.url).toBe(false);
+        expect(actualLoaders[0].options.modules).toEqual({
+            localIdentName: '[local]_[hash:base64:5]',
+        });
+    });
+
+    describe('getLoaders() with PostCSS', function () {
+        it('without options callback', function () {
+            const config = createConfig();
+            config.enableSourceMaps();
+            config.enablePostCssLoader();
+
+            const actualLoaders = cssLoader.getLoaders(config);
+            // css-loader & postcss-loader
+            expect(actualLoaders).toHaveLength(2);
+            expect(actualLoaders[1].options.sourceMap).toBe(true);
+        });
+
+        it('with options callback', function () {
+            const config = createConfig();
+            config.enableSourceMaps();
+            config.enablePostCssLoader((options) => {
+                options.config = {
+                    path: 'config/postcss.config.js',
+                };
+            });
+
+            const actualLoaders = cssLoader.getLoaders(config);
+            // css-loader & postcss-loader
+            expect(actualLoaders).toHaveLength(2);
+            expect(actualLoaders[1].options.sourceMap).toBe(true);
+            expect(actualLoaders[1].options.config.path).toBe('config/postcss.config.js');
+        });
+
+        it('with options callback that returns an object', function () {
+            const config = createConfig();
+            config.enableSourceMaps(true);
+            config.enablePostCssLoader((options) => {
+                options.config = {
+                    path: 'config/postcss.config.js',
+                };
+
+                // This should override the original config
+                return { foo: true };
+            });
+
+            const actualLoaders = cssLoader.getLoaders(config);
+            // css-loader & postcss-loader
+            expect(actualLoaders).toHaveLength(2);
+            expect(actualLoaders[1].options).toEqual({ foo: true });
+        });
+    });
+});
